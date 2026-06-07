@@ -1,11 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { defaultPlayer, defaultEnemy, Phase, roll } from '../data/presets';
 import StatusBar from './StatusBar';
 import SkillSelector from './SkillSelector';
 import ClashDisplay from './ClashDisplay';
 import BattleLog from './BattleLog';
 
-function CombatPhase() {
+function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombatStateChange, playerOverride, enemyOverride, onPlayerOverrideClear, onEnemyOverrideClear, debugScene, onDebugSceneClear }) {
   const [phase, setPhase] = useState(Phase.ROLLING);
   const [round, setRound] = useState(1);
   const [player, setPlayer] = useState({ ...defaultPlayer });
@@ -20,6 +20,28 @@ function CombatPhase() {
   const [combatOver, setCombatOver] = useState(false);
   const [winner, setWinner] = useState(null);
   const [log, setLog] = useState([]);
+
+  // 向父组件报告当前状态
+  useEffect(() => {
+    if (onCombatStateChange) {
+      onCombatStateChange({ phase, round, player, enemy, playerSpeed, enemySpeed, enemySkill, playerSkill, clashIndex, clashResults, resolving, combatOver, winner, log });
+    }
+  }, [phase, round, player, enemy, playerSpeed, enemySpeed, enemySkill, playerSkill, clashIndex, clashResults, resolving, combatOver, winner, log, onCombatStateChange]);
+
+  // 处理来自调试面板的 HP/混乱覆盖
+  useEffect(() => {
+    if (playerOverride) {
+      setPlayer((prev) => ({ ...prev, ...playerOverride }));
+      onPlayerOverrideClear?.();
+    }
+  }, [playerOverride, onPlayerOverrideClear]);
+
+  useEffect(() => {
+    if (enemyOverride) {
+      setEnemy((prev) => ({ ...prev, ...enemyOverride }));
+      onEnemyOverrideClear?.();
+    }
+  }, [enemyOverride, onEnemyOverrideClear]);
 
   const addLog = useCallback(
     (text, type = 'info') => {
@@ -68,8 +90,14 @@ function CombatPhase() {
     const pAction = pSkill.actions[index] || null;
     const eAction = eSkill.actions[index] || null;
 
-    const pRoll = pAction ? roll(pAction.min, pAction.max) : 0;
-    const eRoll = eAction ? roll(eAction.min, eAction.max) : 0;
+    // 调试模式：固定骰值优先
+    const fixedDice = debugConfig.enabled ? (debugConfig.fixedDice[index] || {}) : {};
+    const pRoll = pAction
+      ? (fixedDice.p !== undefined ? fixedDice.p : roll(pAction.min, pAction.max))
+      : 0;
+    const eRoll = eAction
+      ? (fixedDice.e !== undefined ? fixedDice.e : roll(eAction.min, eAction.max))
+      : 0;
 
     let result = null;
     let logText = '';
