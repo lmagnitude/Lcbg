@@ -4,7 +4,6 @@ import StatusBar from './StatusBar';
 import SkillSelector from './SkillSelector';
 import ClashDisplay from './ClashDisplay';
 import BattleLog from './BattleLog';
-import './CombatPhase.css';
 
 function CombatPhase() {
   const [phase, setPhase] = useState(Phase.ROLLING);
@@ -22,11 +21,13 @@ function CombatPhase() {
   const [winner, setWinner] = useState(null);
   const [log, setLog] = useState([]);
 
-  const addLog = useCallback((text, type = 'info') => {
-    setLog((prev) => [...prev, { round, text, type }]);
-  }, [round]);
+  const addLog = useCallback(
+    (text, type = 'info') => {
+      setLog((prev) => [...prev, { round, text, type }]);
+    },
+    [round]
+  );
 
-  // 开始投速度骰
   const handleRollSpeed = () => {
     const pSpeed = roll(player.speed.min, player.speed.max);
     const eSpeed = roll(enemy.speed.min, enemy.speed.max);
@@ -38,7 +39,6 @@ function CombatPhase() {
     setPhase(Phase.ENEMY_SKILL);
   };
 
-  // 敌人选择技能（AI 随机）
   const handleEnemySkillSelect = () => {
     const skill = enemy.skills[Math.floor(Math.random() * enemy.skills.length)];
     setEnemySkill(skill);
@@ -46,12 +46,10 @@ function CombatPhase() {
     setPhase(Phase.PLAYER_SKILL);
   };
 
-  // 玩家选择技能
   const handlePlayerSkillSelect = (skill) => {
     setPlayerSkill(skill);
   };
 
-  // 确认玩家技能，开始结算
   const handleConfirmSkill = () => {
     if (!playerSkill) return;
     addLog(`调查员选择了「${playerSkill.name}」`, 'info');
@@ -59,11 +57,9 @@ function CombatPhase() {
     resolveNextClash(0, player, enemy, playerSkill, enemySkill);
   };
 
-  // 逐段结算拼点
   const resolveNextClash = (index, currentPlayer, currentEnemy, pSkill, eSkill) => {
     const maxActions = Math.max(pSkill.actions.length, eSkill.actions.length);
     if (index >= maxActions) {
-      // 所有动作结算完毕
       setPhase(Phase.ROUND_END);
       setResolving(false);
       return;
@@ -72,7 +68,6 @@ function CombatPhase() {
     const pAction = pSkill.actions[index] || null;
     const eAction = eSkill.actions[index] || null;
 
-    // 投骰子
     const pRoll = pAction ? roll(pAction.min, pAction.max) : 0;
     const eRoll = eAction ? roll(eAction.min, eAction.max) : 0;
 
@@ -83,7 +78,6 @@ function CombatPhase() {
     let newEnemy = { ...currentEnemy };
 
     if (pAction && eAction) {
-      // 判断双方动作类型
       const pIsAttack = pAction.type === 'attack';
       const eIsAttack = eAction.type === 'attack';
 
@@ -140,22 +134,30 @@ function CombatPhase() {
           logType = 'damage';
         }
       } else if (pIsAttack && eIsAttack) {
-        // 双方都是攻击 → 互殴
-        const pDmg = pRoll;
-        const eDmg = eRoll;
-        result = { playerDmg: eDmg, enemyDmg: pDmg };
-        newPlayer = {
-          ...newPlayer,
-          hp: newPlayer.hp - eDmg,
-          sanity: Math.max(0, newPlayer.sanity - eDmg),
-        };
-        newEnemy = {
-          ...newEnemy,
-          hp: newEnemy.hp - pDmg,
-          sanity: Math.max(0, newEnemy.sanity - pDmg),
-        };
-        logText = `双方对攻！调查员受 ${eDmg}，深潜者受 ${pDmg}`;
-        logType = 'damage';
+        // 双方攻击 → 按废墟图书馆规则：高的一方命中，另一方不受伤害；相等则平局无人受伤
+        if (pRoll > eRoll) {
+          result = { pHit: true, pDmg: pRoll, eHit: false, eDmg: 0 };
+          newEnemy = {
+            ...newEnemy,
+            hp: newEnemy.hp - pRoll,
+            sanity: Math.max(0, newEnemy.sanity - pRoll),
+          };
+          logText = `调查员攻击胜出！深潜者受 ${pRoll} 伤害`;
+          logType = 'damage';
+        } else if (eRoll > pRoll) {
+          result = { pHit: false, pDmg: 0, eHit: true, eDmg: eRoll };
+          newPlayer = {
+            ...newPlayer,
+            hp: newPlayer.hp - eRoll,
+            sanity: Math.max(0, newPlayer.sanity - eRoll),
+          };
+          logText = `深潜者攻击胜出！调查员受 ${eRoll} 伤害`;
+          logType = 'damage';
+        } else {
+          result = { pHit: false, pDmg: 0, eHit: false, eDmg: 0 };
+          logText = `双方攻击平局，均不受伤害`;
+          logType = 'info';
+        }
       } else {
         // 双方都是防御 → 无事发生
         result = { hit: false, dmg: 0 };
@@ -163,7 +165,6 @@ function CombatPhase() {
         logType = 'info';
       }
     } else if (pAction && !eAction) {
-      // 只有玩家有动作（玩家攻击空位）
       if (pAction.type === 'attack') {
         const dmg = pRoll;
         newEnemy = {
@@ -176,7 +177,6 @@ function CombatPhase() {
         logType = 'damage';
       }
     } else if (!pAction && eAction) {
-      // 只有敌人有动作（敌人攻击空位）
       if (eAction.type === 'attack') {
         const dmg = eRoll;
         newPlayer = {
@@ -205,7 +205,6 @@ function CombatPhase() {
     setPlayer(newPlayer);
     setEnemy(newEnemy);
 
-    // 检查是否有人倒下
     if (newPlayer.hp <= 0) {
       setPhase(Phase.COMBAT_END);
       setCombatOver(true);
@@ -226,7 +225,6 @@ function CombatPhase() {
     setResolving(true);
   };
 
-  // 手动推进下一段结算
   const handleNextClash = () => {
     setResolving(false);
     const maxActions = Math.max(playerSkill.actions.length, enemySkill.actions.length);
@@ -237,7 +235,6 @@ function CombatPhase() {
     resolveNextClash(clashIndex, player, enemy, playerSkill, enemySkill);
   };
 
-  // 下一回合
   const handleNextRound = () => {
     setRound((r) => r + 1);
     setEnemySkill(null);
@@ -251,7 +248,6 @@ function CombatPhase() {
     addLog('--- 回合结束 ---', 'system');
   };
 
-  // 重新开始
   const handleRestart = () => {
     setPhase(Phase.ROLLING);
     setRound(1);
@@ -269,36 +265,52 @@ function CombatPhase() {
     setLog([]);
   };
 
-  // 判断是否混乱（混乱值为0则跳过回合）
-  const playerStunned = player.sanity <= 0;
+  const phaseLabels = {
+    [Phase.ROLLING]: '等待速度骰',
+    [Phase.ENEMY_SKILL]: '敌方选择技能',
+    [Phase.PLAYER_SKILL]: '选择你的技能',
+    [Phase.RESOLVING]: '拼点结算中',
+    [Phase.ROUND_END]: '回合结束',
+    [Phase.COMBAT_END]: '战斗结束',
+  };
 
   return (
-    <div className="combat-phase">
+    <div className="max-w-[780px] mx-auto p-5">
       {/* 阶段标题 */}
-      <div className="combat-phase__header">
-        <span className="combat-phase__round">⚔️ 第 {round} 轮</span>
-        <span className="combat-phase__phase-label">
-          {phase === Phase.ROLLING && '等待速度骰'}
-          {phase === Phase.ENEMY_SKILL && '敌方选择技能'}
-          {phase === Phase.PLAYER_SKILL && '选择你的技能'}
-          {phase === Phase.RESOLVING && '拼点结算中'}
-          {phase === Phase.ROUND_END && '回合结束'}
-          {phase === Phase.COMBAT_END && '战斗结束'}
+      <div className="flex justify-between items-center mb-5 flex-wrap gap-2">
+        <span className="text-[22px] font-bold" style={{ color: 'var(--color-accent)' }}>
+          ⚔️ 第 {round} 轮
+        </span>
+        <span
+          className="text-sm px-3 py-1 rounded-[20px]"
+          style={{ background: 'var(--color-card)', color: 'var(--color-text-secondary)' }}
+        >
+          {phaseLabels[phase]}
         </span>
       </div>
 
       {/* 双血条 */}
-      <div className="combat-phase__status-row">
+      <div className="flex items-center gap-4 mb-4 justify-center flex-wrap">
         <StatusBar character={player} isActive={phase === Phase.PLAYER_SKILL} side="left" />
-        <div className="combat-phase__vs-indicator">VS</div>
+        <div
+          className="text-2xl font-black"
+          style={{ color: 'var(--color-accent)', textShadow: '0 0 8px var(--color-accent-glow)' }}
+        >
+          VS
+        </div>
         <StatusBar character={enemy} isActive={phase === Phase.ENEMY_SKILL} side="right" />
       </div>
 
       {/* 速度骰结果 */}
-      {(playerSpeed !== null) && (
-        <div className="combat-phase__speed">
-          <span>速度骰: 调查员 <strong>{playerSpeed}</strong> vs 深潜者 <strong>{enemySpeed}</strong></span>
-          <span className="combat-phase__speed-hint">
+      {playerSpeed !== null && (
+        <div
+          className="flex flex-col items-center gap-1 mb-4 p-2.5 rounded-[10px] text-sm"
+          style={{ background: 'var(--color-card)', color: 'var(--color-text)' }}
+        >
+          <span>
+            速度骰: 调查员 <strong>{playerSpeed}</strong> vs 深潜者 <strong>{enemySpeed}</strong>
+          </span>
+          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
             {playerSpeed > enemySpeed ? '调查员更快（敌人优先选技能）' : '深潜者更快（敌人优先选技能）'}
           </span>
         </div>
@@ -306,8 +318,12 @@ function CombatPhase() {
 
       {/* ROLLING 阶段 */}
       {phase === Phase.ROLLING && (
-        <div className="combat-phase__action-area">
-          <button className="btn btn--primary" onClick={handleRollSpeed}>
+        <div className="mb-5 text-center">
+          <button
+            className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+            style={{ background: 'var(--color-accent)', color: '#fff' }}
+            onClick={handleRollSpeed}
+          >
             🎲 投速度骰
           </button>
         </div>
@@ -315,9 +331,15 @@ function CombatPhase() {
 
       {/* ENEMY_SKILL 阶段 */}
       {phase === Phase.ENEMY_SKILL && (
-        <div className="combat-phase__action-area">
-          <p className="combat-phase__prompt">深潜者正在选择技能...</p>
-          <button className="btn btn--primary" onClick={handleEnemySkillSelect}>
+        <div className="mb-5 text-center">
+          <p className="text-sm mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+            深潜者正在选择技能...
+          </p>
+          <button
+            className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+            style={{ background: 'var(--color-accent)', color: '#fff' }}
+            onClick={handleEnemySkillSelect}
+          >
             👁️ 查看敌方技能选择
           </button>
         </div>
@@ -325,13 +347,27 @@ function CombatPhase() {
 
       {/* PLAYER_SKILL 阶段 */}
       {phase === Phase.PLAYER_SKILL && (
-        <div className="combat-phase__action-area">
+        <div className="mb-5">
           {enemySkill && (
-            <div className="combat-phase__enemy-reveal">
-              <span className="combat-phase__reveal-label">敌方选择了：</span>
-              <span className="combat-phase__reveal-skill">{enemySkill.name}</span>
-              <span className="combat-phase__reveal-detail">
-                ({enemySkill.actions.map((a, i) => `${a.type === 'attack' ? '攻' : a.type === 'defense' ? '防' : '闪'} ${a.min}~${a.max}`).join(' → ')})
+            <div
+              className="flex items-center gap-2 px-4 py-3 mb-4 rounded-[10px] border border-[#e74c3c] flex-wrap"
+              style={{ background: 'var(--color-card)' }}
+            >
+              <span className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
+                敌方选择了：
+              </span>
+              <span className="text-[15px] font-bold" style={{ color: '#e74c3c' }}>
+                {enemySkill.name}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                (
+                {enemySkill.actions
+                  .map(
+                    (a) =>
+                      `${a.type === 'attack' ? '攻' : a.type === 'defense' ? '防' : '闪'} ${a.min}~${a.max}`
+                  )
+                  .join(' → ')}
+                )
               </span>
             </div>
           )}
@@ -343,7 +379,8 @@ function CombatPhase() {
             label="选择你的技能"
           />
           <button
-            className="btn btn--primary"
+            className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: 'var(--color-accent)', color: '#fff' }}
             onClick={handleConfirmSkill}
             disabled={!playerSkill}
           >
@@ -354,8 +391,8 @@ function CombatPhase() {
 
       {/* RESOLVING 阶段 */}
       {phase === Phase.RESOLVING && (
-        <div className="combat-phase__action-area">
-          <div className="combat-phase__clash-list">
+        <div className="mb-5">
+          <div className="mb-4">
             {clashResults.map((cr, idx) => (
               <ClashDisplay
                 key={idx}
@@ -369,25 +406,37 @@ function CombatPhase() {
             ))}
           </div>
           {resolving && (
-            <div className="combat-phase__clash-controls">
-              <p className="combat-phase__clash-hint">
+            <div className="flex flex-col items-center gap-2.5">
+              <p className="text-[15px] font-semibold" style={{ color: 'var(--color-accent)' }}>
                 → 第 {clashIndex + 1} 段动作拼点
               </p>
-              <button className="btn btn--primary" onClick={handleNextClash}>
+              <button
+                className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+                style={{ background: 'var(--color-accent)', color: '#fff' }}
+                onClick={handleNextClash}
+              >
                 ▶ 结算下一段
               </button>
             </div>
           )}
           {!resolving && phase === Phase.ROUND_END && (
-            <div className="combat-phase__action-area">
-              <button className="btn btn--primary" onClick={handleNextRound}>
+            <div className="text-center">
+              <button
+                className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+                style={{ background: 'var(--color-accent)', color: '#fff' }}
+                onClick={handleNextRound}
+              >
                 ➡ 下一回合
               </button>
             </div>
           )}
           {!resolving && phase === Phase.COMBAT_END && (
-            <div className="combat-phase__action-area">
-              <button className="btn btn--primary" onClick={handleRestart}>
+            <div className="text-center">
+              <button
+                className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+                style={{ background: 'var(--color-accent)', color: '#fff' }}
+                onClick={handleRestart}
+              >
                 🔄 重新开始
               </button>
             </div>
@@ -397,8 +446,8 @@ function CombatPhase() {
 
       {/* ROUND_END 阶段 */}
       {phase === Phase.ROUND_END && !resolving && (
-        <div className="combat-phase__action-area">
-          <div className="combat-phase__clash-list">
+        <div className="mb-5">
+          <div className="mb-4">
             {clashResults.map((cr, idx) => (
               <ClashDisplay
                 key={idx}
@@ -411,26 +460,39 @@ function CombatPhase() {
               />
             ))}
           </div>
-          <button className="btn btn--primary" onClick={handleNextRound}>
-            ➡ 下一回合
-          </button>
+          <div className="text-center">
+            <button
+              className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+              style={{ background: 'var(--color-accent)', color: '#fff' }}
+              onClick={handleNextRound}
+            >
+              ➡ 下一回合
+            </button>
+          </div>
         </div>
       )}
 
       {/* COMBAT_END 阶段 */}
       {phase === Phase.COMBAT_END && (
-        <div className="combat-phase__action-area">
-          <div className="combat-phase__victory">
+        <div className="mb-5 text-center">
+          <div
+            className="text-[28px] font-black mb-4 animate-victory-pulse"
+            style={{ color: 'var(--color-accent)' }}
+          >
             {winner === '调查员' ? '🎉 调查员获胜！' : '💀 深潜者获胜！'}
           </div>
-          <button className="btn btn--primary" onClick={handleRestart}>
+          <button
+            className="mx-auto px-8 py-3 border-none rounded-[10px] text-[15px] font-semibold cursor-pointer transition-all duration-200 hover:brightness-110 hover:-translate-y-px"
+            style={{ background: 'var(--color-accent)', color: '#fff' }}
+            onClick={handleRestart}
+          >
             🔄 重新开始
           </button>
         </div>
       )}
 
       {/* 战斗日志 */}
-      <div className="combat-phase__log-area">
+      <div className="mt-5">
         <BattleLog entries={log} />
       </div>
     </div>
