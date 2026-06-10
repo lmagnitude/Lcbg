@@ -1,80 +1,75 @@
 import React from 'react';
 import { actionTypeLabel } from '../data/presets';
 
-function ClashDisplay({ playerAction, enemyAction, playerRoll, enemyRoll, result, isActive }) {
-  if (!playerAction || !enemyAction) return null;
+const typeColors = {
+  attack: { bg: 'rgba(231, 76, 60, 0.15)', color: '#e74c3c' },
+  defense: { bg: 'rgba(52, 152, 219, 0.15)', color: '#3498db' },
+  evade: { bg: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71' },
+};
 
-  const playerIsAttack = playerAction.type === 'attack';
-  const enemyIsAttack = enemyAction.type === 'attack';
+function SingleClash({ pAction, eAction, pRoll, eRoll, result }) {
+  if (!pAction || !eAction) return null;
 
-  // 确定进攻方和防守方
-  let attackerLabel, defenderLabel, attackRoll, defenseRoll, attackType, defenseType;
+  const oIsAttack = pAction.type === 'attack';
+  const eIsAttack = eAction.type === 'attack';
 
-  if (enemyIsAttack && !playerIsAttack) {
-    attackerLabel = '深潜者';
-    defenderLabel = '调查员';
-    attackRoll = enemyRoll;
-    defenseRoll = playerRoll;
-    attackType = enemyAction.type;
-    defenseType = playerAction.type;
-  } else if (playerIsAttack && !enemyIsAttack) {
-    attackerLabel = '调查员';
-    defenderLabel = '深潜者';
-    attackRoll = playerRoll;
-    defenseRoll = enemyRoll;
-    attackType = playerAction.type;
-    defenseType = enemyAction.type;
-  } else {
-    // 双方都是攻击或都是防御
+  // mutual attack
+  if (oIsAttack && eIsAttack) {
     return (
-      <div
-        className="rounded-xl p-[14px_18px] mb-2.5 border-l-4 border-transparent transition-all duration-300"
-        style={{
-          background: 'var(--color-card)',
-          borderLeftColor: isActive ? 'var(--color-accent)' : 'transparent',
-          opacity: isActive ? 1 : 0.7,
-          animation: isActive ? 'revealIn 0.4s ease' : 'none',
-        }}
-      >
-        <div style={{ color: 'var(--color-text)' }}>
-          <span>双方均为攻击动作</span>
-          <div className="flex gap-4 text-sm my-1" style={{ color: 'var(--color-text-secondary)' }}>
-            <span>调查员: {playerRoll}</span>
-            <span>深潜者: {enemyRoll}</span>
-          </div>
-          {result && (
-            <div className="mt-1.5">
-              {result.pHit && (
-                <span className="block text-sm font-semibold mt-1" style={{ color: '#e74c3c' }}>
-                  调查员命中！深潜者受 {result.pDmg} 伤害
-                </span>
-              )}
-              {result.eHit && (
-                <span className="block text-sm font-semibold mt-1" style={{ color: '#e74c3c' }}>
-                  深潜者命中！调查员受 {result.eDmg} 伤害
-                </span>
-              )}
-              {!result.pHit && !result.eHit && (
-                <span className="block text-sm font-semibold mt-1" style={{ color: '#f39c12' }}>
-                  双方平局，均不受伤害
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+      <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-text)' }}>
+        <span style={{ color: typeColors.attack.color }}>攻{pRoll}</span>
+        <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>vs</span>
+        <span style={{ color: typeColors.attack.color }}>攻{eRoll}</span>
+        {result && (
+          <span className="font-semibold" style={{ color: result.tie ? '#f39c12' : '#e74c3c' }}>
+            {result.tie ? '→ 平局' : result.oWins ? `→ 胜 ${result.dmg}伤害` : `→ 败 ${result.dmg}伤害`}
+          </span>
+        )}
       </div>
     );
   }
 
-  const hit = result ? result.hit : null;
-  const damage = result ? result.dmg : null;
-  const evadeRecovery = result ? result.evadeRecovery : null;
+  // determine attacker / defender
+  const attackerRoll = eIsAttack ? eRoll : pRoll;
+  const defenderRoll = eIsAttack ? pRoll : eRoll;
+  const aType = eIsAttack ? eAction.type : pAction.type;
+  const dType = eIsAttack ? pAction.type : eAction.type;
 
-  const typeColors = {
-    attack: { bg: 'rgba(231, 76, 60, 0.15)', color: '#e74c3c' },
-    defense: { bg: 'rgba(52, 152, 219, 0.15)', color: '#3498db' },
-    evade: { bg: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71' },
-  };
+  return (
+    <div className="flex items-center gap-2 text-sm flex-wrap" style={{ color: 'var(--color-text)' }}>
+      <span
+        className="px-1.5 py-0.5 rounded text-xs font-semibold"
+        style={{ background: typeColors[aType].bg, color: typeColors[aType].color }}
+      >
+        {actionTypeLabel[aType]} {attackerRoll}
+      </span>
+      <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>vs</span>
+      <span
+        className="px-1.5 py-0.5 rounded text-xs font-semibold"
+        style={{ background: typeColors[dType].bg, color: typeColors[dType].color }}
+      >
+        {actionTypeLabel[dType]} {defenderRoll}
+      </span>
+      {result && (
+        <span
+          className="font-semibold text-xs"
+          style={{
+            color: result.hit ? '#e74c3c' : dType === 'evade' ? '#2ecc71' : '#3498db',
+          }}
+        >
+          {result.hit
+            ? `→ 命中 ${result.dmg}伤害`
+            : dType === 'evade'
+            ? `→ 闪避 +${result.evadeRecovery}混乱`
+            : '→ 防御成功'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ClashDisplay({ actionResults, ownerName, oppName, isActive }) {
+  if (!actionResults || actionResults.length === 0) return null;
 
   return (
     <div
@@ -86,50 +81,29 @@ function ClashDisplay({ playerAction, enemyAction, playerRoll, enemyRoll, result
         animation: isActive ? 'revealIn 0.4s ease' : 'none',
       }}
     >
-      <div className="flex items-center gap-2.5 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span
           className="text-sm font-semibold px-2.5 py-0.5 rounded-md"
-          style={{ background: typeColors[attackType].bg, color: typeColors[attackType].color }}
+          style={{ background: typeColors.attack.bg, color: typeColors.attack.color }}
         >
-          {attackerLabel} {actionTypeLabel[attackType]}
+          {ownerName}
         </span>
         <span className="text-[13px] font-bold" style={{ color: 'var(--color-text-secondary)' }}>
           VS
         </span>
         <span
           className="text-sm font-semibold px-2.5 py-0.5 rounded-md"
-          style={{ background: typeColors[defenseType].bg, color: typeColors[defenseType].color }}
+          style={{ background: typeColors.defense.bg, color: typeColors.defense.color }}
         >
-          {defenderLabel} {actionTypeLabel[defenseType]}
+          {oppName}
         </span>
       </div>
 
-      <div className="flex gap-4 text-sm mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-        <span>
-          {actionTypeLabel[attackType]}骰: <strong style={{ color: 'var(--color-text)' }}>{attackRoll}</strong>
-        </span>
-        <span>
-          {actionTypeLabel[defenseType]}骰: <strong style={{ color: 'var(--color-text)' }}>{defenseRoll}</strong>
-        </span>
+      <div className="flex flex-col gap-1.5 pl-1">
+        {actionResults.map((ar, idx) => (
+          <SingleClash key={idx} {...ar} />
+        ))}
       </div>
-
-      {result && (
-        <div className="mt-1.5 text-sm font-semibold">
-          {hit && (
-            <span style={{ color: '#e74c3c' }}>
-              {attackerLabel}命中！造成 {damage} 点伤害
-            </span>
-          )}
-          {!hit && defenseType !== 'evade' && (
-            <span style={{ color: '#3498db' }}>防御成功，无伤害</span>
-          )}
-          {!hit && defenseType === 'evade' && (
-            <span style={{ color: '#2ecc71' }}>
-              闪避成功！{defenderLabel}回复 {evadeRecovery} 混乱值
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

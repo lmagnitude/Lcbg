@@ -1,7 +1,6 @@
+// ============================================================
 // 预设技能数据
-// 每个技能含 name 和 actions 数组
-// action: { type: 'attack' | 'defense' | 'evade', min: number, max: number }
-
+// ============================================================
 export const playerSkills = [
   {
     name: '掩护转移',
@@ -36,43 +35,133 @@ export const enemySkills = [
   },
 ];
 
-// 预设角色
-export const defaultPlayer = {
-  name: '调查员',
-  hp: 13,
-  maxHp: 13,
-  sanity: 14,
-  maxSanity: 14,
-  speed: { min: 2, max: 5 },
-  skills: playerSkills,
-};
+// ============================================================
+// 3v3 预设战斗者 (Combatant)
+// ============================================================
+export const defaultAllies = [
+  {
+    id: 'a1',
+    name: '调查员A',
+    side: 'ally',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: playerSkills,
+    stunned: false,
+  },
+  {
+    id: 'a2',
+    name: '调查员B',
+    side: 'ally',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: playerSkills,
+    stunned: false,
+  },
+  {
+    id: 'a3',
+    name: '调查员C',
+    side: 'ally',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: playerSkills,
+    stunned: false,
+  },
+];
 
-export const defaultEnemy = {
-  name: '深潜者',
-  hp: 13,
-  maxHp: 13,
-  sanity: 14,
-  maxSanity: 14,
-  speed: { min: 2, max: 5 },
-  skills: enemySkills,
-};
+export const defaultEnemies = [
+  {
+    id: 'e1',
+    name: '深潜者A',
+    side: 'enemy',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: enemySkills,
+    stunned: false,
+  },
+  {
+    id: 'e2',
+    name: '深潜者B',
+    side: 'enemy',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: enemySkills,
+    stunned: false,
+  },
+  {
+    id: 'e3',
+    name: '深潜者C',
+    side: 'enemy',
+    hp: 13,
+    maxHp: 13,
+    sanity: 14,
+    maxSanity: 14,
+    speedDieCount: 1,
+    speed: { min: 2, max: 5 },
+    skills: enemySkills,
+    stunned: false,
+  },
+];
 
+// 保持向后兼容（调试面板 / 简单场景可能用到）
+export const defaultPlayer = defaultAllies[0];
+export const defaultEnemy = defaultEnemies[0];
+
+// ============================================================
 // 战斗阶段枚举
+// ============================================================
 export const Phase = {
   ROLLING: 'ROLLING',
-  ENEMY_SKILL: 'ENEMY_SKILL',
-  PLAYER_SKILL: 'PLAYER_SKILL',
+  SPEED_DISPLAY: 'SPEED_DISPLAY',
+  ENEMY_PLAN: 'ENEMY_PLAN',
+  ALLY_PLAN: 'ALLY_PLAN',
   RESOLVING: 'RESOLVING',
   ROUND_END: 'ROUND_END',
   COMBAT_END: 'COMBAT_END',
 };
 
-// 骰子工具
+// ============================================================
+// 工具函数
+// ============================================================
 export function roll(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 动作类型中文名
+export function cloneCombatants(combatants) {
+  return combatants.map((c) => ({ ...c, skills: c.skills }));
+}
+
+export function findCombatant(combatants, id) {
+  return combatants.find((c) => c.id === id);
+}
+
+export function getAliveAllies(combatants) {
+  return combatants.filter((c) => c.side === 'ally' && c.hp > 0);
+}
+
+export function getAliveEnemies(combatants) {
+  return combatants.filter((c) => c.side === 'enemy' && c.hp > 0);
+}
+
 export const actionTypeLabel = {
   attack: '攻击',
   defense: '防御',
