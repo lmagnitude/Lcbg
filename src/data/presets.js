@@ -47,10 +47,11 @@ export const defaultAllies = [
     maxHp: 13,
     sanity: 14,
     maxSanity: 14,
-    speedDieCount: 1,
+    speedDieCount: 2,
     speed: { min: 2, max: 5 },
     skills: playerSkills,
     stunned: false,
+    evadeLeftover: 0,
   },
   {
     id: 'a2',
@@ -64,6 +65,7 @@ export const defaultAllies = [
     speed: { min: 2, max: 5 },
     skills: playerSkills,
     stunned: false,
+    evadeLeftover: 0,
   },
   {
     id: 'a3',
@@ -77,6 +79,7 @@ export const defaultAllies = [
     speed: { min: 2, max: 5 },
     skills: playerSkills,
     stunned: false,
+    evadeLeftover: 0,
   },
 ];
 
@@ -89,10 +92,11 @@ export const defaultEnemies = [
     maxHp: 13,
     sanity: 14,
     maxSanity: 14,
-    speedDieCount: 1,
+    speedDieCount: 2,
     speed: { min: 2, max: 5 },
     skills: enemySkills,
     stunned: false,
+    evadeLeftover: 0,
   },
   {
     id: 'e2',
@@ -106,6 +110,7 @@ export const defaultEnemies = [
     speed: { min: 2, max: 5 },
     skills: enemySkills,
     stunned: false,
+    evadeLeftover: 0,
   },
   {
     id: 'e3',
@@ -119,6 +124,7 @@ export const defaultEnemies = [
     speed: { min: 2, max: 5 },
     skills: enemySkills,
     stunned: false,
+    evadeLeftover: 0,
   },
 ];
 

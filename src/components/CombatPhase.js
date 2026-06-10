@@ -4,7 +4,6 @@ import {
   defaultEnemies,
   Phase,
   roll,
-  cloneCombatants,
   findCombatant,
 } from '../data/presets';
 import StatusBar from './StatusBar';
@@ -15,13 +14,14 @@ import BattleLog from './BattleLog';
 // ---- helpers ----
 const clone = (c) => ({ ...c, skills: [...c.skills] });
 
-function calcEvadeResult(pRoll, eRoll, currentPlayer) {
-  const evaded = pRoll > eRoll;
-  const dmg = Math.max(0, eRoll - pRoll);
+function calcEvadeResult(evadeRoll, attackRoll) {
+  const evaded = evadeRoll > attackRoll;
+  const dmg = Math.max(0, attackRoll - evadeRoll);
   return {
     hit: !evaded,
     dmg: evaded ? 0 : dmg,
-    evadeRecovery: evaded ? pRoll : 0,
+    evadeRecovery: evaded ? evadeRoll : 0,
+    evadeLeftover: evaded ? evadeRoll - attackRoll : 0,
   };
 }
 
@@ -43,15 +43,17 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
   const [clashIndex, setClashIndex] = useState(0);
   const [clashResults, setClashResults] = useState([]);
   const [resolving, setResolving] = useState(false);
-  const [combatOver, setCombatOver] = useState(false);
   const [winnerSide, setWinnerSide] = useState(null);
   const [log, setLog] = useState([]);
 
   const addLog = useCallback((text, type = 'info') => { setLog((p) => [...p, { round, text, type }]); }, [round]);
 
   // keep parent updated
-  const cs = makeCombatState(phase, round, combatants, speedDice, plans, log, resolving);
-  useEffect(() => { onCombatStateChange?.(cs); }, [phase, round, combatants, speedDice, plans, log, resolving]);
+  useEffect(() => {
+    onCombatStateChange?.(
+      makeCombatState(phase, round, combatants, speedDice, plans, log, resolving)
+    );
+  }, [phase, round, combatants, speedDice, plans, log, resolving, onCombatStateChange]);
 
   // debug overrides
   useEffect(() => {
@@ -66,13 +68,12 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
       onPlayerOverrideClear?.();
       onEnemyOverrideClear?.();
     }
-  }, [playerOverride, enemyOverride]);
+  }, [playerOverride, enemyOverride, onPlayerOverrideClear, onEnemyOverrideClear]);
 
   // helpers
   const getC = (id) => findCombatant(combatants, id);
   const aliveAllies = () => combatants.filter((c) => c.side === 'ally' && c.hp > 0);
   const aliveEnemies = () => combatants.filter((c) => c.side === 'enemy' && c.hp > 0);
-  const isAlive = (id) => { const c = getC(id); return c && c.hp > 0; };
 
   // ============ PHASE: ROLLING ============
   const handleRollSpeed = () => {
@@ -136,7 +137,6 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
   // check if current ally's selection causes an interception
   const checkInterception = (targetId) => {
     if (!currentAllyPlan) return null;
-    const owner = getC(currentAllyPlan.ownerId);
     // find enemy plans that target slower allies of the same side
     const intercepted = [];
     plans.forEach((ep, idx) => {
@@ -282,6 +282,22 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
     let newCombatants = combatants;
     const fd = getUsedDiceForPlan(index);
 
+    const getWorkingCombatant = (id) => newCombatants.find((c) => c.id === id);
+    const consumeEvadeLeftover = (id) => {
+      const leftover = getWorkingCombatant(id)?.evadeLeftover || 0;
+      if (leftover > 0) {
+        newCombatants = newCombatants.map((c) =>
+          c.id === id ? { ...c, evadeLeftover: 0 } : c
+        );
+      }
+      return leftover;
+    };
+    const setEvadeLeftover = (id, value) => {
+      newCombatants = newCombatants.map((c) =>
+        c.id === id ? { ...c, evadeLeftover: Math.max(0, value) } : c
+      );
+    };
+
     for (let aIdx = 0; aIdx < maxActions; aIdx++) {
       const pAction = oSkill.actions[aIdx] || null;
       const eAction = eSkill.actions[aIdx] || null;
@@ -296,60 +312,93 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
       let result = null;
       let logText = '';
       let logType = 'info';
+      let displayPRoll = pRoll;
+      let displayERoll = eRoll;
 
       if (pAction && eAction) {
         const oIsAttack = pAction.type === 'attack';
         const eIsAttack = eAction.type === 'attack';
 
         if (!oIsAttack && eIsAttack) {
-          // owner defending vs opp attacking
-          const dmg = Math.max(0, eRoll - pRoll);
+          // owner defending/evading vs opp attacking
+          const inheritedEvade = consumeEvadeLeftover(owner.id);
+          const effectivePRoll = pRoll + inheritedEvade;
+          const dmg = Math.max(0, eRoll - effectivePRoll);
+          const inheritedText = inheritedEvade > 0 ? `（继承闪避+${inheritedEvade}）` : '';
+          displayPRoll = effectivePRoll;
+
           if (pAction.type === 'evade') {
-            result = calcEvadeResult(pRoll, eRoll, owner);
+            result = calcEvadeResult(effectivePRoll, eRoll);
             if (result.hit) {
               newCombatants = newCombatants.map((c) =>
                 c.id === owner.id ? { ...c, hp: c.hp - dmg, sanity: Math.max(0, c.sanity - dmg) } : c
               );
-              logText = `${oppPlan ? (getC(oppPlan.ownerId)?.name) : '?'}命中！${owner.name}受${dmg}伤害`;
+              logText = `${oppPlan ? (getC(oppPlan.ownerId)?.name) : '?'}命中！${owner.name}受${dmg}伤害${inheritedText}`;
               logType = 'damage';
             } else {
+              setEvadeLeftover(owner.id, result.evadeLeftover);
               newCombatants = newCombatants.map((c) =>
                 c.id === owner.id
-                  ? { ...c, sanity: Math.min(c.maxSanity, c.sanity + pRoll) }
+                  ? { ...c, sanity: Math.min(c.maxSanity, c.sanity + effectivePRoll) }
                   : c
               );
-              logText = `${owner.name}闪避成功，回复${pRoll}混乱`;
+              logText = `${owner.name}闪避成功${inheritedText}，回复${effectivePRoll}混乱，保留${result.evadeLeftover}闪避`;
               logType = 'evade';
             }
           } else {
-            const blocked = pRoll >= eRoll;
+            const blocked = effectivePRoll >= eRoll;
             result = { hit: !blocked, dmg };
             if (!blocked) {
               newCombatants = newCombatants.map((c) =>
                 c.id === owner.id ? { ...c, hp: c.hp - dmg, sanity: Math.max(0, c.sanity - dmg) } : c
               );
-              logText = `${oppPlan ? getC(oppPlan.ownerId)?.name : '?'}命中！${owner.name}受${dmg}伤害`;
+              logText = `${oppPlan ? getC(oppPlan.ownerId)?.name : '?'}命中！${owner.name}受${dmg}伤害${inheritedText}`;
               logType = 'damage';
             } else {
-              logText = '防御成功，无伤害';
+              logText = `防御成功，无伤害${inheritedText}`;
               logType = 'defense';
             }
           }
         } else if (oIsAttack && !eIsAttack) {
-          // owner attacking vs opp defending
-          const dmg = Math.max(0, pRoll - eRoll);
-          const blocked = eRoll >= pRoll;
-          result = { hit: !blocked, dmg };
+          // owner attacking vs opp defending/evading
+          const inheritedEvade = consumeEvadeLeftover(oppPlan.ownerId);
+          const effectiveERoll = eRoll + inheritedEvade;
+          const dmg = Math.max(0, pRoll - effectiveERoll);
+          const blocked = effectiveERoll >= pRoll;
           const oppName = getC(oppPlan.ownerId)?.name || '?';
-          if (!blocked) {
-            newCombatants = newCombatants.map((c) =>
-              c.id === oppPlan.ownerId ? { ...c, hp: c.hp - dmg, sanity: Math.max(0, c.sanity - dmg) } : c
-            );
-            logText = `${owner.name}命中${oppName}，${dmg}伤害`;
-            logType = 'damage';
+          const inheritedText = inheritedEvade > 0 ? `（继承闪避+${inheritedEvade}）` : '';
+          displayERoll = effectiveERoll;
+
+          if (eAction.type === 'evade') {
+            result = calcEvadeResult(effectiveERoll, pRoll);
+            if (result.hit) {
+              newCombatants = newCombatants.map((c) =>
+                c.id === oppPlan.ownerId ? { ...c, hp: c.hp - dmg, sanity: Math.max(0, c.sanity - dmg) } : c
+              );
+              logText = `${owner.name}命中${oppName}，${dmg}伤害${inheritedText}`;
+              logType = 'damage';
+            } else {
+              setEvadeLeftover(oppPlan.ownerId, result.evadeLeftover);
+              newCombatants = newCombatants.map((c) =>
+                c.id === oppPlan.ownerId
+                  ? { ...c, sanity: Math.min(c.maxSanity, c.sanity + effectiveERoll) }
+                  : c
+              );
+              logText = `${oppName}闪避成功${inheritedText}，回复${effectiveERoll}混乱，保留${result.evadeLeftover}闪避`;
+              logType = 'evade';
+            }
           } else {
-            logText = `${oppName}防御成功`;
-            logType = 'defense';
+            result = { hit: !blocked, dmg };
+            if (!blocked) {
+              newCombatants = newCombatants.map((c) =>
+                c.id === oppPlan.ownerId ? { ...c, hp: c.hp - dmg, sanity: Math.max(0, c.sanity - dmg) } : c
+              );
+              logText = `${owner.name}命中${oppName}，${dmg}伤害${inheritedText}`;
+              logType = 'damage';
+            } else {
+              logText = `${oppName}防御成功${inheritedText}`;
+              logType = 'defense';
+            }
           }
         } else if (oIsAttack && eIsAttack) {
           // both attack: higher wins, ties = nothing
@@ -381,7 +430,7 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
       }
 
       if (logText) addLog(logText, logType);
-      actionResults.push({ pAction, eAction, pRoll, eRoll, result });
+      actionResults.push({ pAction, eAction, pRoll: displayPRoll, eRoll: displayERoll, result });
     }
 
     setCombatants(newCombatants);
@@ -396,7 +445,6 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
     const newEnemiesAlive = newCombatants.filter((c) => c.side === 'enemy' && c.hp > 0).length;
     if (newAlliesAlive === 0) {
       setPhase(Phase.COMBAT_END);
-      setCombatOver(true);
       setWinnerSide('enemy');
       addLog('盟友全灭！敌人获胜！', 'damage');
       setResolving(false);
@@ -404,7 +452,6 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
     }
     if (newEnemiesAlive === 0) {
       setPhase(Phase.COMBAT_END);
-      setCombatOver(true);
       setWinnerSide('ally');
       addLog('敌人全灭！盟友获胜！', 'damage');
       setResolving(false);
@@ -433,7 +480,7 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
         return { ...c, stunned: true, sanity: Math.ceil(c.maxSanity * 0.2) };
       }
       return c;
-    });
+    }).map((c) => ({ ...c, evadeLeftover: 0 }));
     setCombatants(newCombatants);
     setSpeedDice([]);
     setPlans([]);
@@ -454,7 +501,6 @@ function CombatPhase({ debugConfig = { enabled: false, fixedDice: {} }, onCombat
     setClashIndex(0);
     setClashResults([]);
     setResolving(false);
-    setCombatOver(false);
     setWinnerSide(null);
     setLog([]);
   };

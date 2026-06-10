@@ -15,10 +15,9 @@ function SkillSelector({ skills, selectedSkill, onSelect, disabled, label }) {
             disabled={disabled}
             className="text-left min-w-[160px] px-[18px] py-[14px] rounded-xl border-2 border-transparent transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: 'var(--color-card)',
+              background: selectedSkill === skill ? 'var(--color-accent-bg)' : 'var(--color-card)',
               color: 'var(--color-text)',
               borderColor: selectedSkill === skill ? 'var(--color-accent)' : 'transparent',
-              background: selectedSkill === skill ? 'var(--color-accent-bg)' : 'var(--color-card)',
             }}
           >
             <div className="text-[15px] font-bold mb-2">{skill.name}</div>
